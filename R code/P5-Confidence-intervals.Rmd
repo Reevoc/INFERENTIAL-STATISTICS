@@ -1,0 +1,478 @@
+---
+title: 'Practice Lecture 5: Confidence intervals'
+author: "Erlis Ruli (ruli@stat.unipd.it)"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  pdf_document: 
+    fig_caption: yes
+    number_sections: yes
+    keep_tex: yes
+  fontsize: 20pt
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE, prompt = TRUE)
+```
+
+
+In this handouts we illustrate examples considered in Lecture 5 in practice using \texttt{R}. In some examples we generate fictitious data from the model and in others we consider real-life data.
+
+# Exact pivots
+
+## Example 5.2 (Normal population with known variance)
+Let $Y_1,\ldots, Y_n$ be a random sample of size $n$ from $N(\mu, 2)$ and our aim is to build a confidence interval for $\mu$. In particular, suppose that the sample size is $n=10$ and it is obtained from the above distribution with true parameter $\mu_0 = 0$.
+
+So Nature takes this model and generates the following data (or if you prefer to think more practically: suppose you are measuring the difference in diameter of bearing spheres with respect to a target value, and you have $n$ such measurements)
+
+
+```{r}
+set.seed(5) # fix the random seed
+n <- 10 # set the sample size
+mu0 <- 0
+sigma2.0 <- 2
+yobs <- rnorm(n, mu0, sqrt(sigma2.0))
+yobs # measurements we are given by Nature
+```
+
+We saw in Lecture 5 the procedure for building a confidence interval for this problem, i.e. $\bar Y \pm z_{\alpha/2}\sigma/\sqrt{n}$. Let us consider a 0.95 confidence interval, i.e. $\alpha=0.05$. Thus for the sample at hand we replace the random quantities with their observed counterparts to obtain
+
+```{r}
+alpha = 0.05
+(bar.y <- mean(yobs)) # sample mean
+(se <- sqrt(sigma2.0/n)) # this is the standard error of the estimate
+bar.y + c(-1,1)*qnorm(p = alpha/2, lower.tail =FALSE)*se
+# note: we used lower.tail =FALSE in the quantile function of the
+# normal distribution in order to have the upper quantile as desire.
+
+```
+
+Thus our interval is $[`r round(bar.y + c(-1,1)*qnorm(p = alpha/2, lower.tail =FALSE)*sqrt(sigma2.0/n),2)`]$. At this point it is good to pause a bit and think about it. This interval is the observed (i.e. numerical) version of the random interval $\bar Y \pm z_{\alpha/2}\sigma/\sqrt{n}$. Thus, the probability that the interval $[`r round(bar.y + c(-1,1)*qnorm(p = alpha/2, lower.tail =FALSE)*sqrt(sigma2.0/n),2)`]$ contains $\mu_0$ can only be either 1 or 0 depending on whether $\mu_0$ is inside or not, respectively. By the way, in this particular case, the observed interval does contain $\mu_0$ so the probability of coverage is 1. 
+
+Recall that, in practice, we do not know $\mu_0$, so we will never know if $\mu_0$ is inside the particular observed interval at hand or not. However, we if we could compute in this way a large number of intervals, then 95\% of them will contain $\mu_0$. So we can only say that we are 95\% **confident** that our observed interval $[`r round(bar.y + c(-1,1)*qnorm(p = alpha/2, lower.tail =FALSE)*sqrt(sigma2.0/n),2)`]$ contains $\mu_0$.
+
+To see this better, we will perform a \emph{simulation study} in which we compute a large number of such intervals, say $N = 10^6$ (i.e. we ask Nature to give us $N$ datasets from the same model it used to generate the first sample). The idea is the following. We generate $N=10^6$ observed samples from the same model as above and for each observed sample, we compute the associated observed 95 percent interval. Here is the \texttt{R} code for this.
+
+
+```{r, cache=TRUE}
+set.seed(5)
+N = 1e+6 # the number of intervals we want to calculate
+my.N.CI <- matrix(NA, nrow = N, ncol = 2)# put the obs.intervals here
+for(i in 1:N){
+  yi <- rnorm(n, mu0, sqrt(sigma2.0))
+  bar.yi <- mean(yi)
+  my.N.CI[i,] <- bar.yi + c(-1,1)*qnorm(p = alpha/2, lower.tail =FALSE)*sqrt(sigma2.0/n)
+}
+# here are the first 6 observed intervals out of N
+head(my.N.CI)
+```
+
+We plot below the first 50 observed confidence intervals along with the true parameter value
+
+```{r}
+# we use the plotrix library for doing this plot
+# if not already installed use
+# install.packages(plotrix) 
+library(plotrix)
+plotCI(x= 1:50, y = apply(my.N.CI[1:50,], 1, mean), 
+       li = my.N.CI[1:50,1],ui = my.N.CI[1:50,2],
+       xlab="Observed confidence intervals for mu",ylab=NA, lwd=3,)
+abline(h = 0, lwd=2, lty=2)
+```
+
+Inspecting the first 50 observed intervals for $\mu$, we note that there are three intervals which do not contain the true value (here denoted by the horizontal dashed line). How may of the $N$ intervals do contain the true value $\mu_0$? 
+
+```{r}
+mu0.inside <- apply(my.N.CI, MARGIN = 1,
+                    function(x) ifelse(mu0 >= x[1]  & mu0 <= x[2],1,0))
+# m0.inside is a vector of 1 and 0
+head(mu0.inside)
+
+# how many ones are there relative to N?
+mean(mu0.inside)
+```
+
+Thus we conclude that the fraction of the intervals that contain $\mu_0$ is essentially $0.95$. 
+
+**Remark:** Obviously it is not exactly 0.95 because `r round(mean(mu0.inside),6)` is only a sample average which targets the confidence level $(1-\alpha) = 0.95$. By the LLN, this sample average converges to the target as $N\to \infty$, but our lazy choice was $N=10^6<\infty$. Also, do not confuse $n$, the sample size with $N$ the number of simulations we performed. The larger $N$ the closer will be the sample average to the target value $(1-\alpha)$. On the other hand, the pivot we used to build the confidence intervals has an exact distribution, no matter what is $n$, thus the latter plays no role in this particular case. 
+
+**Remark:** The higher the confidence level, i.e. the lower $\alpha$ the wider is the confidence interval. Thus for $\alpha=0$, our interval is simply $\mathbb{R}$, thus we are obviously certain that our interval will contain $\mu_0$.
+
+## Example 5.3 (Normal population with known mean)
+This time we have $\mu$ known and $\sigma^2$ is the unknown parameter of interest. Let us set $\mu=0$, thus the model we are considering is $N(0,\sigma^2)$.
+
+Assume that the true variance is $\sigma^2_0 = 1$ and let $n = 10$. Under this assumption Nature generates the following data (this time we are interested in the variability of the differences in diameter of our bearing spheres).
+
+```{r}
+set.seed(5) # fix the random seed
+n <- 10 # set the sample size
+mu0 <-  0
+sigma2.0 <- 1
+yobs <- rnorm(n, mu0, sqrt(sigma2.0))
+```
+
+We saw that the random interval $\left[\frac{n\hat\sigma^2_\mu}{\chi_{n,\alpha/2}^2}, \frac{n\hat\sigma^2_\mu}{\chi_{n,1-\alpha/2}}\right]$ is a $(1-\alpha)$ confidence interval for $\sigma^2$. Let us consider a 0.95 confidence interval. Thus for the sample at hand we replace the random quantities with their observed counterparts to obtain
+
+```{r}
+(hat.sig2.mu <- sum((yobs-mu0)^2)/n)
+# CI is
+c(n*hat.sig2.mu/qchisq(p=alpha/2, df=n, lower.tail = FALSE),
+  n*hat.sig2.mu/qchisq(p=1-alpha/2, df=n, lower.tail = FALSE))
+```
+
+Again, this is an observed interval and may or may not contain the true value  $\sigma_0^2$. All we can say is that we are 95\% confident that it will.
+
+**Exercise. ** Compute a 0.95 confidence interval for $\log\sigma^2$.
+
+
+## Example 5.4 (Normal population) 
+This time both $\mu$ and $\sigma^2$ are unknown parameters, thus the model we are considering is $N(\mu,\sigma^2)$. We want to compute a confidence interval for each of the parameters.
+
+This time we have two different pivotal quantities (see Lecture 5). Assume that the true mean is $\mu_0 =0$ and the true variance is $\sigma^2_0 = 1$ and let $n = 10$. Under this assumption Nature generates the following data (this time we are interested both in the average and in the variability of the differences in diameter of our bearing spheres).
+
+```{r}
+set.seed(5) # fix the random seed
+n <- 10 # set the sample size
+mu0 <-  0
+sigma2.0 <- 1
+yobs <- rnorm(n, mu0, sqrt(sigma2.0))
+```
+
+Let us consider 0.95 confidence intervals. Thus for the sample at hand we replace the random quantities with their observed counterparts to obtain
+
+```{r}
+# recall that var divides by n-1!
+(hat.sig2 <- var(yobs))
+(hat.mu <- mean(yobs))
+
+# the standard error of hat.mu
+se <- sqrt(hat.sig2/n)
+
+# CI for mu
+c(hat.mu + c(-1,1)*qt(alpha/2, df=n-1, low=F)*se)
+
+# CI for mu
+c(n*hat.sig2/qchisq(p=alpha/2, df=n-1, lower.tail = FALSE),
+  n*hat.sig2/qchisq(p=1-alpha/2, df=n-1, lower.tail = FALSE))
+```
+
+Again, these are observed intervals, which may or may not contain their respective values. All we can say is that we are 95\% confident that each interval will contain its true value.
+
+
+Since \texttt{R} is a statistical software we do not need to do everything "by hand" as above. In this example we can instead use the built-in \texttt{R} command \texttt{t.test} which, besides other things, computes also a confidence interval for $\mu$.
+
+```{r}
+# for the CI for mu
+t.test(yobs)
+```
+
+Do not worry about the meaning of rest of the output, we will see it in the incoming lecture. Notice how much wider are the confidence intervals obtained in this example as compared to those of the previous two examples. The higher uncertainty due to wider intervals is the price we have to pay when the parameters  are unknown and thus have to be estimated from data.
+
+## Example 5.5 (Difference of means for two normal samples)
+To illustrate this example we consider real data on energy consumption of two type of WM's, which differ only on the type of motor they are equipped with. The data are not paired, in the sense that the WM's in the two groups have different ID's. 
+
+In this problem we are interested in the difference in of the two population means $\mu_1-\mu_2$. We first load the data in R by
+
+```{r}
+# read the file, specifying header=TRUE since the first row contains the names of the variables.
+motors <- read.table("wm_motors.txt", header = TRUE)
+head(motors)
+
+# another quick view for data frames is
+str(motors)
+```
+
+The command \texttt{read.table} reads the external file and loads the data into an \texttt{R} object, here called \texttt{motors}, which is of type: \texttt{data.frame}. The latter generalises matrices, as created by the command \texttt{matrix}, since they are able to store numbers as well as strings, i.e. in a matrix you can only store things of the same type.
+
+First we perform some reshaping of the data in order to have the two variables separated.
+
+```{r}
+# energy consumption with motor GEN1
+y <- motors$energy[motors$motor == "GEN1"]
+
+# energy consumption with motor GEN2
+x <- motors$energy[motors$motor == "GEN2"]
+```
+
+Now we compute the confidence interval for $\mu_1-\mu_2$ by assuming that the two samples come from two normal distributions, resp. $Y_i\,\overset{iid}\sim\, N(\mu_1,\sigma^2_1)$ and $X_i\,\overset{iid}\sim\,N(\mu_2,\sigma_2^2)$, assuming equal variances, i.e. $\sigma_1^2=\sigma_2^2=\sigma$.
+
+```{r}
+# sample averages of energy consumption under GEN1 and GEN2
+bar.y <- mean(y)
+bar.x <- mean(x)
+
+# compute the size of the two samples
+n <- length(y)
+m <- length(x)
+
+# sample variances 
+s2.y <- var(y)
+s2.x <- var(x)
+
+# pooled variance
+pooled.s2 <- ((n-1)*s2.y + (m-1)*s2.x)/(n+m-2)
+
+# the standard error is thus
+se = sqrt(pooled.s2*(1/n+1/m))
+
+# the confidence interval is then
+(bar.y-bar.x) + c(-1,1)*qt(alpha/2, df=n+m-2, low=F)*se
+```
+
+We see that both limits of the observed confidence interval are negative. To interpret this result, suppose that the true value of $\mu_1$, say $\mu_{1,0}$ and the true value of $\mu_{2}$, $\mu_{2,0}$, are equal, i.e. $\mu_{1,0}=\mu_{2,0}$ so then $\mu_{1,0}-\mu_{2,0} =0$. Actually, this was what the engineers wanted to check in the study. Indeed, they suspected that the two motors do not consume on average the same energy, other things held equal. We see that zero is not inside the confidence interval. Thus, what we can conclude from this study is that we are 95\% confident that the means of energy consumption in the two groups of WM's are not equal, i.e. with 95% confidence the two motors consume on average different amounts of energy.
+
+
+Again, there is a quicker way to compute this interval: the \texttt{t.test} command.
+
+```{r}
+t.test(y,x, var.equal = T)
+```
+
+
+## Example 5.6 (Ratio of variances for two normal samples)
+We consider the same data of the example above but now we assume different variances between the samples and we are interested on the ratio of the variances.  We compute the 0.95 confidence interval for the ratio
+$\sigma_1^2/\sigma_2^2$, both manually, by applying its mathematical definition, and by using the \texttt{R} command \texttt{var.test}.
+
+```{r}
+c(s2.y/s2.x * qf(alpha/2, df1=n-1, df2=m-1),
+  s2.y/s2.x * qf(1- alpha/2, df1=n-1, df2=m-1))
+
+# the same done with the built-in R command
+var.test(y,x)
+```
+
+Thus we see that with 95\% of confidence the ratio of the variances $\sigma_1^2/\sigma^2_2$ varies from $8.6$ to 76.6. 
+
+**Exercise** If the engineers claim that the true variances $\sigma_{1,0}^2$ and $\sigma_{2,0}^2$ are equal. Do the data support this claim?
+
+
+# Asymptotic pivots
+In the case of exact pivots (as in Section 1), the only way the sample size $n$ affects the results is by leading to narrower confidence intervals.
+
+In the case of asymptotic pivots, not only $n$ does affect the width of the interval, in the same way as above, but it does affect also the coverage probability of the interval itself. Thus, the coverage of confidence intervals from asymptotic pivots will not be exactly equal to $1-\alpha$ but it will converge to $(1-\alpha)$ as $n\to\infty$. 
+
+In practice our dataset has a fixed sample size $n$ and this is result is not very useful since it cannot tell us how accurate our intervals will be in that particular sample size. However, we can check the coverage of our intervals for a given sample size by simulation. We will do this in the next example.
+
+## Example 5.8 (Poisson population)
+Consider the same setting as in Lecture 5 and the aim is to check the coverage probability of the approximate $(1-\alpha)$ Wald confidence intervals, i.e. we want to compute 
+
+\[
+P_\lambda\left(\bar Y+z_{\alpha/2}\sqrt{\frac{\bar Y}{n}}\leq \lambda\leq \bar Y+z_{\alpha/2}\sqrt{\frac{\bar Y}{n}}\right),
+\]
+
+for different values of $n$.  The aim is thus to see if the coverage probability goes towards $(1-\alpha)$ as $n$ increases. 
+
+This probability can be computed analytically, but here we will approximate it by simulation, i.e. we will use the Monte Carlo method (see P1). The Monte Carlo method can be used to approximate any feature of a probability distribution that is analytically difficult.
+
+We set the true parameter $\lambda_0 = 3/2$ and take sample sizes $n = 5, 50$. We will approximate such the coverage probability by its empirical average in a large Monte Carlo sample $N$. By the LLN we know that as $N\to\infty$, the sample average will converge to the true probability coverage of the interval.
+
+
+```{r}
+lambda0 <- 3/2
+N <- 1e+6
+
+# we first build a function which takes as input an observed sample and
+# outputs a confidence interval
+ci.poisson <- function(ysamp, alpha){
+  n = length(ysamp)
+  bar.y = mean(ysamp)
+  se = sqrt(bar.y/n) 
+  oo = c(bar.y + c(-1,1)*qnorm(alpha/2, low=F)*se)
+  return(oo)
+}
+```
+
+Now we generate datasets from the Poison model and compute the confidence intervals by our newly defined function \texttt{ci.poisson}.
+
+With sample of size $n=5$ we have 
+
+```{r, cache=TRUE}
+set.seed(5)
+n <- 5
+CI.5 <- matrix(NA, nrow = N, ncol = 2)# put the obs.intervals here
+for(i in 1:N) {
+  y5 <- rpois(n, lambda0)
+  CI.5[i,] <- ci.poisson(y5,alpha = 0.05)
+}
+lambda0.inside5 <- apply(CI.5, MARGIN = 1,
+                    function(x) ifelse(lambda0 >= x[1]  & lambda0 <= x[2],1,0))
+# how many ones are there?
+mean(lambda0.inside5)
+```
+
+With sample of size $n=50$ we have 
+
+
+```{r, cache=TRUE}
+set.seed(5)
+n <- 50
+CI.50 <- matrix(NA, nrow = N, ncol = 2)# put the obs.intervals here
+for(i in 1:N) {
+  y50 <- rpois(n, lambda0)
+  CI.50[i,] <- ci.poisson(y50,alpha = 0.05)
+}
+lambda0.inside50 <- apply(CI.50, MARGIN = 1,
+                    function(x) ifelse(lambda0 >= x[1]  & lambda0 <= x[2],1,0))
+# how many ones are there?
+mean(lambda0.inside50)
+```
+
+Thus we see that with $n=5$ and when $\lambda_0 = 3/2$ the probability coverage of the interval is approximately equal to `r round(mean(lambda0.inside5),4)` whereas with $n=50$ such a probability is `r round(mean(lambda0.inside50),4)`, much closer to the nominal value 0.95.
+
+**Exercise** Use the fact that $n\bar X\sim \text{Poi}(n\lambda_0)$, to compute the coverage of the above intervals exactly.
+
+<!-- This could be a nice exercise for illustrating the inequality of the coverage and confidence level as given in L5. So for future classes expand and consider developping the exercise for different values of lambda and ask to students as exercise to approximate it by simulations. -->
+
+## Example 5.9 (Is Mendel's theory supported?)
+We illustrate this problem by means of a practical example. 
+
+In one of his experiments with pea-plants Mendel crossed a certain number of green pod plants with yellow pod plants. The first generation (F1) he got only green plants (given green was the dominant trait colour). Successively plants of the F1 were let to self-pollinate leading thus to second generation (F2) plants. The F2 plants Mendel got where 39 green and 17 were yellow. Mendel wanted to know the proportion of the green plants.
+
+Let us formalise this problem from a statistical point of view. Let $Y_i$ denote a binary r.v. which takes value 1 if the $i$th F2 plant is green and takes 0 otherwise, let $\theta = P(X_i = 1)$, i.e. the probability of having a green plant among the F2 plants. It is reasonable to assume that the plants of the F2 are between them independent, thus we have that $Y_1,\ldots, Y_{n}$, with $Y_i\sim {\rm Ber}(\theta)$, and in this case $n=56$. The aim is then to compute a confidence interval for $\theta$.
+
+
+With the data above we have that 
+
+```{r}
+# 36 green out of 56
+bar.y = 39/(39+17)
+se = sqrt((bar.y)*(1-bar.y)/56)
+
+# the 0.95 CI is
+bar.y + c(-1,1)*qnorm(alpha/2, low=F)*se
+```
+
+According to Mendel's theory, since the green colour is dominant, it must appear in 75\% of the plants. In other words, $\theta_0=0.75$. With 0.95 confidence we can say that Mendel's theory is supported.
+
+A confidence interval for the probability of success $\theta$ can also be obtained by the \texttt{R} command \texttt{prop.test} as follows
+
+```{r}
+prop.test(x=39, n=39+17, correct = F)
+```
+
+Note the 0.95 confidence interval here does not exactly coincide with the Wald-type confidence interval we computed above. This is because \texttt{prop.test} uses another approximate pivot which is based on the score function. We will not illustrate it here but we suffices to say that in large samples the two pivot will give approximately equal results. By this command we can build also a confidence interval for a two sample problem as in Example 5.10.
+
+
+## Example 5.11 (Two normal populations with unequal variances)
+
+This example can be handled similarly as in Example 5.3, where this time the option \texttt{var.equal = FALSE} in the command \texttt{t.test} must be specified.
+
+
+## Was the Challenger disaster predictable?
+Lastly, consider Example 2.8 (Lecture 2) but applied to a different problem, the space shuttle Challenger\footnote{Dalal, Fowlkes and Hoadley (1989) Risk Analysis of the Space Shuttle: Pre-Challenger Prediction of Failure. Journal of the American Statistical Association Vol. 84, No. 408, pp.945-957. See also here https://www.space.com/18084-space-shuttle-challenger.html}.
+
+On January 28, 1986, a routine launch was anticipated for the space shuttle named Challenger. Seventy-three seconds into the flight, a disaster happened: the shuttle broke apart, killing all seven crew members on board. An investigation into the cause of the disaster focused on a critical seal of the solid rocket boosters, called O-ring, and it is believed that damage to these O-rings during a shuttle launch may be related to the ambient temperature during the launch. Below we summarize observational data on O-rings from 23 pre-Challenger shuttle missions, where the mission order is based on the temperature at the time of the launch. Also reported are the number of O-rings damaged after the launch (\texttt{orings}).
+
+First we load and plot the data
+
+```{r}
+challenger <- read.table("challenger2.dat", header = TRUE)
+plot(challenger)
+points(x=53, y=5, col=2, pch="*", cex=2)
+```
+
+The data we see were analysed by NASA's engineers the day before the Challenger disaster. There was some perplexity about launching the shuttle on that day, due to very low temperatures. Some of the engineers plotted a truncated version of the data, discarding all the zeros, as in the figure below.
+
+```{r}
+plot(challenger[challenger$orings>0,],
+     ylab = "Orings(>0)")
+points(x=53, y=5, col=2, pch="*", cex=2)
+```
+The conclusion was that there is no clear relationship between the number of broken o-rings and temperature, so they decided to launch the shuttle...
+
+
+To formulate a statistical model, we assume that the launches are independent. Furthermore, note that each shuttle was equipped with 6 o-rings. A reasonable model for these data is the same as that of Example 2.8, where now $Y_i$ is a $\text{Bin}(6,\theta_i)$ r.v. that reports the number of damaged o-rings; the probability of "success" $\theta_i$ depends on $t_i$, a fixed variable that gives the temperature at the $i$th shuttle launch. In particular, the assumed model is
+
+\begin{eqnarray*}
+\text{orings}_i &\sim& {\rm Bin}(6,\theta_i),\quad \text{with ${\rm oring}_i$ independent from $  {\rm oring}_j$, for all $i\neq j = 1,\ldots,23$},\\
+{\rm logit}(\theta_i) & =& \alpha + \beta {\rm temperature}_i, \quad i=1,\ldots,23,
+\end{eqnarray*}
+
+The parameter $\beta$ concerns the relationship between the number of broken o-rings and the temperature; $\beta<0$ implies that there is a negative relation. 
+
+Obviously the parameters are unknown and we will estimate them from the data. Since there is no exact pivotal quantity for this problem we will appeal to Theorem 4.9 for building a confidence interval for $\beta$.
+
+First let us code the log-likelihood ourselves and then compute the MLE.
+
+```{r}
+logLBin <- function(theta, data){
+  
+  n  = nrow(data)
+  alpha. = theta[1]
+  beta. = theta[2] 
+  
+  # compute the success prob. for each launch (observation)
+  thetai = plogis(alpha. + beta.*data$temperature)
+  
+  # log-likelihood for each launch (observation)
+  oo = dbinom(x = data$orings, size = 6, prob = thetai, log=TRUE)
+  
+  # sum all the log-likelhood contributions
+  return(sum(oo))
+}
+```
+
+To maximise the likelihood function we take as starting value $(\alpha=10, \beta=0)$.
+
+```{r}
+start0 <- c(10, 0)
+(oo <- optim(par = start0, fn = function(x) -logLBin(x, data = challenger), 
+            hessian = TRUE))
+```
+
+We see that the numerical optimisation routine converged and yelded:
+
+* the MLE of $\theta = (\alpha, \beta)$ given by $\hat\theta\, \dot=\, (`r round(oo$par[1],2)`,`r round(oo$par[2],2)`$ and $-\log L(\hat\theta) \dot = `r round(oo$val,2)`$
+* the observed information matrix 
+
+\begin{equation*}
+J_{n} \dot= 
+\begin{pmatrix}
+`r round(oo$hessian[1,1],2)` & `r round(oo$hessian[1,2],2)` \\
+`r round(oo$hessian[2,1],2)` & `r round(oo$hessian[2,2],2)`
+\end{pmatrix}
+\end{equation*}
+
+
+Here it is an approximate (Wald-type) 0.95 confidence interval for $\beta$
+
+```{r}
+var.theta <- solve(oo$hessian)
+(se.beta <- sqrt(var.theta[2,2]))
+oo$par[2] + c(-1,1)*qnorm(alpha/2, low=F)*se.beta
+```
+
+The night before the launch, NASA's engineers supposed there was relation between o-rings and temperature, that is, in terms of our model $\beta_0 = 0$. However, the data say that with an approximate 95\% confidence, there is a negative relation between o-rings and ambient temperature, i.e. $\beta_0<0$; thus the lower the temperature the higher is on average the number broken o-rings.
+
+For a given temperature value $t$, the estimated model is $\rm{Bin}(6,\hat\theta(t))$, where $\hat\theta(t) = \frac{e^{\hat\alpha + \hat\beta t}}{1+e^{\hat\alpha + \hat\beta t}}$. By the way, the temperature at the launch of the Challenger shuttle was 31$^\circ$F. So at the day of the lunch, the estimated distribution of the number of failures of o-rings is $\rm{Bin}\left(6,\frac{e^{\hat\alpha + \hat\beta\cdot31}}{1+e^{\hat\alpha + \hat\beta\cdot 31}}\right)$ and is plotted below
+
+```{r}
+# estimated probability of "success"
+(theta.t <- plogis(oo$par[1] + oo$par[2]*31))
+plot(x = 0:6, dbinom(0:6, 6, theta.t), type="h", 
+     xlab="O-rings", ylab="p.d.f.")
+```
+
+We can also calculate an estimated probability for the failure of the Challenger space shuttle at $t=31$, this is 
+just the sum of the probabilities that more than 3 o-rings fail, i.e. 
+
+```{r}
+sum(dbinom(4:6,6,theta.t))
+
+# or also by
+1-pbinom(3,6, prob = theta.t,)
+```
+
+which is sadly close to 1.
+
+
+The model we fitted so far is called logistic regression and this can also be performed using built-in \texttt{R} command, \texttt{glm} as follows.
+
+```{r}
+oo2 <- glm(cbind(orings, 6-orings)~temperature, data=challenger,
+           family = binomial())
+summary(oo2)
+```
+
+The description of this command is lengthy and outside the scope of this course, but just notice how close are the estimates and the standard errors provided by \texttt{glm} with ours. The rest of the output need not concern us for the moment. We will see what the columns $Z$ and Pr(>|Z|) are useful for in Lecture 6.
+
